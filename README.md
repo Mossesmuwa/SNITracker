@@ -2,15 +2,16 @@
 
 # 🛰️ SNITracker
 
-### Lightweight TLS SNI Monitoring & Policy Tool
+### Lightweight Network Intelligence & TLS/DNS Monitoring Toolkit
 
-A simple network tool that extracts **Server Name Indication (SNI)** from TLS traffic to provide real-time domain visibility, logging, and basic policy enforcement without decrypting traffic.
+A modular Python-based toolkit for inspecting **TLS SNI** and **DNS traffic** in real time, enabling domain visibility, logging, and simple policy enforcement without decrypting traffic.
 
 ---
 
 ![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-active-success.svg)
+![Type](https://img.shields.io/badge/type-network%20security-blue.svg)
 
 </div>
 
@@ -18,44 +19,58 @@ A simple network tool that extracts **Server Name Indication (SNI)** from TLS tr
 
 ## ⚠️ Notice
 
-SNITracker is a **network analysis tool** intended only for:
+SNITracker is a **network security and analysis toolkit** intended only for:
 
 - Educational use  
 - Security research  
 - Systems you own or are authorized to test  
 
-Do not use it for unauthorized traffic interception.
+Unauthorized use on external networks may violate laws.
 
 ---
 
-## 🌐 What It Does
+## 🌐 Overview
 
-SNITracker reads the **TLS handshake** and extracts the SNI (domain name) before the traffic is fully encrypted.
+SNITracker is a lightweight monitoring toolkit that analyzes:
 
-It helps you see which domains are being accessed on a network without decrypting HTTPS traffic.
+- **TLS SNI (Server Name Indication)** from encrypted connections  
+- **DNS queries** before encryption occurs  
+
+It provides real-time visibility into network activity without decrypting traffic.
 
 ---
 
 ## 🧠 Features
 
-- Extracts SNI from TLS traffic in real time  
-- Shows visited domains from encrypted connections  
-- Blocks or allows domains using simple rules  
-- Logs network activity  
-- Can redirect blocked traffic to a warning page  
-- Lightweight and written in Python  
-- Easy to extend and modify  
+- 🔍 Real-time TLS SNI extraction  
+- 🌐 DNS query monitoring  
+- 🚫 Domain-based blocking rules  
+- 🧾 Structured logging (text + JSON mode)  
+- 📊 Runtime statistics tracking  
+- 🧠 Deduplication to reduce noise  
+- 🚧 Warning / block page redirection  
+- ⚡ Lightweight Python-based architecture  
+- 🔌 Modular tools for each network layer  
 
 ---
 
-## 🏗️ How It Works
+## 🏗️ Architecture
 
 ```mermaid
 flowchart LR
-    A[Device Traffic] --> B[TLS Handshake]
-    B --> C[Extract SNI]
-    C --> D[Policy Rules]
-    D --> E[Allow / Block / Redirect / Log]
+    A[Network Traffic] --> B[TLS Monitor]
+    A --> C[DNS Monitor]
+
+    B --> D[SNI Extraction]
+    C --> E[DNS Parser]
+
+    D --> F[Policy Engine]
+    E --> F[Policy Engine]
+
+    F --> G[Allow]
+    F --> H[Block]
+    F --> I[Redirect Warning Server]
+    F --> J[Logging System]
 ```
 
 ---
@@ -65,19 +80,33 @@ flowchart LR
 ```bash
 git clone https://github.com/Mossesmuwa/SNITracker.git
 cd SNITracker
-pip install scapy
+pip install -r requirements.txt
 ```
 
-> ⚠️ Requires administrator/root permissions to capture network traffic.
+> ⚠️ Requires administrator/root privileges for packet capture.
 
 ---
 
-## 🚀 How to Use
+## 🚀 Usage
 
+### 🔍 SNI Stream Logger
 ```bash
-python sni_logger.py      # Logs visited domains
-python sni_filter.py      # Applies blocking rules
-python warning_server.py  # Starts warning page server
+python sni_stream_logger.py --iface wlan0
+```
+
+### 🌐 DNS Monitor
+```bash
+python dns_monitor.py --iface wlan0 --json
+```
+
+### 🚧 SNI Filter Engine (Proxy Mode)
+```bash
+python sni_filter.py
+```
+
+### ⚠️ Warning / Block Page Server
+```bash
+python warning_server.py --port 8080
 ```
 
 ---
@@ -86,28 +115,36 @@ python warning_server.py  # Starts warning page server
 
 ### Blocked Domains
 ```python
-BLOCKED_DOMAINS = {"example.com", "badsite.com"}
+BLOCKED_DOMAINS = {
+    "example.com",
+    "badsite.com"
+}
+```
+
+### DNS / SNI Logging
+```python
+LOG_FILE = "dns_log.txt"
 ```
 
 ### Warning Server
 ```python
-WARNING_IP = "1.1.1.1"
-WARNING_PORT = 8080
-```
-
-### Logs
-```python
-LOG_FILE = "sni_log.txt"
+--message "This site is blocked by policy"
 ```
 
 ---
 
 ## 📊 Example Output
 
+### SNI / DNS Logs
 ```
 [2026-06-05 14:32:10] google.com
 [2026-06-05 14:32:15] github.com
-[2026-06-05 14:32:20] badsite.com → BLOCKED
+[2026-06-05 14:32:20] badsite.com [FLAGGED]
+```
+
+### JSON Mode
+```json
+{"time": "2026-06-05T14:32:10", "domain": "google.com", "flagged": false}
 ```
 
 ---
@@ -115,38 +152,41 @@ LOG_FILE = "sni_log.txt"
 ## 🚧 Limitations
 
 - Does not decrypt HTTPS traffic  
-- Limited with TLS 1.3 Encrypted Client Hello (ECH)  
-- Requires admin/root access  
-- Works only when SNI is available  
-- Not a full firewall or DPI system  
+- Limited against TLS 1.3 Encrypted Client Hello (ECH)  
+- Requires elevated privileges  
+- Depends on SNI/DNS visibility  
+- Not a full DPI or enterprise firewall system  
 
 ---
 
 ## 🧪 Use Cases
 
-- Learning network security basics  
-- Monitoring traffic in lab environments  
-- Testing simple network policies  
-- Security research and experiments  
+- Network security learning and research  
+- Lab environment traffic monitoring  
+- DNS and TLS metadata analysis  
+- Policy enforcement prototyping  
+- Educational cybersecurity projects  
 
 ---
 
-## 🧭 Future Improvements
+## 🧭 Roadmap
 
-- Web dashboard for live monitoring  
-- GeoIP tracking for domains  
-- DNS + SNI correlation  
-- Anomaly detection  
-- Firewall integration  
-- Multi-device monitoring  
+- 🌐 Web dashboard (live traffic monitoring)  
+- 📍 GeoIP enrichment for domains  
+- 🔗 DNS + SNI correlation engine  
+- 🤖 Anomaly detection system  
+- 🔥 Firewall integration (iptables/nftables)  
+- 🧭 Multi-node distributed monitoring  
 
 ---
 
 ## ⚙️ Tech Stack
 
-- Python  
-- Scapy (packet capture)  
-- Raw socket network inspection  
+- Python 3.8+  
+- Scapy (packet inspection)  
+- Socket programming  
+- Raw TCP stream analysis  
+- HTTP server (built-in)
 
 ---
 
@@ -158,11 +198,11 @@ MIT License
 
 ## 🙌 Inspiration
 
-This project is based on ideas from network security, TLS inspection, and metadata analysis systems.
+Built from concepts in network security, TLS metadata inspection, and DNS analysis systems.
 
 Key inspiration:
 
 👉 https://youtu.be/FBwHNMgxmhI  
 **David Bambal**
 
-> Encrypted traffic still contains useful metadata — and that metadata can reveal important patterns.
+> Encrypted traffic still reveals structure — and structure reveals behavior.
