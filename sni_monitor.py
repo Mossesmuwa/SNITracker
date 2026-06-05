@@ -1,77 +1,164 @@
-# IMPORTANT: This script was created used ChatGPT. Use at your own risk.
+# sni_stream_logger.py
+# Improved TLS SNI logger (stream-aware)
 
 from scapy.all import sniff, TCP, Raw
 from datetime import datetime
+import logging
+from collections import defaultdict
 
 LOG_FILE = "sni_log.txt"
 
-def extract_sni(payload):
+# -----------------------
+# Logging setup
+# -----------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+log = logging.getLogger("sni-logger")
+
+
+# -----------------------
+# Per-flow buffer storage
+# -----------------------
+streams = defaultdict(bytearray)
+
+
+# -----------------------
+# Safe SNI extractor
+# -----------------------
+def extract_sni(data: bytes):
     try:
-        data = bytes(payload)
-
-        # TLS Handshake check
-        if len(data) < 5:
+        if len(data) < 50:
             return None
 
-        # TLS Handshake record
-        if data[0] != 0x16:
+        if data[0] != 0x16:  # TLS handshake
             return None
 
-        pos = 43
+        # skip record header + handshake header
+        pos = 5
 
-        # Session ID
-        session_id_length = data[pos]
-        pos += 1 + session_id_length
+        if len(data) < pos + 4:
+            return None
 
-        # Cipher Suites
-        cipher_suites_length = int.from_bytes(data[pos:pos+2], 'big')
-        pos += 2 + cipher_suites_length
+        pos += 4
 
-        # Compression Methods
-        compression_methods_length = data[pos]
-        pos += 1 + compression_methods_length
+        # session id
+        session_len = data[pos]
+        pos += 1 + session_len
 
-        # Extensions
-        extensions_length = int.from_bytes(data[pos:pos+2], 'big')
+        if pos + 2 > len(data):
+            return None
+
+        cipher_len = int.from_bytes(data[pos:pos+2], "big")
+        pos += 2 + cipher_len
+
+        if pos >= len(data):
+            return None
+
+        comp_len = data[pos]
+        pos += 1 + comp_len
+
+        if pos + 2 > len(data):
+            return None
+
+        ext_len = int.from_bytes(data[pos:pos+2], "big")
         pos += 2
 
-        end = pos + extensions_length
+        end = pos + ext_len
+        if end > len(data):
+            return None
 
         while pos + 4 <= end:
-            ext_type = int.from_bytes(data[pos:pos+2], 'big')
-            ext_length = int.from_bytes(data[pos+2:pos+4], 'big')
+            ext_type = int.from_bytes(data[pos:pos+2], "big")
+            ext_size = int.from_bytes(data[pos+2:pos+4], "big")
             pos += 4
 
-            # SNI Extension
-            if ext_type == 0x0000:
-                sni_data = data[pos:pos+ext_length]
+            # SNI extension
+            if ext_type == 0:
+                block = data[pos:pos+ext_size]
 
-                # Skip list length + name type
-                server_name_length = int.from_bytes(sni_data[3:5], 'big')
-                server_name = sni_data[5:5+server_name_length]
+                if len(block) < 5:
+                    return None
 
-                return server_name.decode(errors="ignore")
+                name_len = int.from_bytes(block[3:5], "big")
+                server_name = block[5:5+name_len].decode(errors="ignore")
 
-            pos += ext_length
+                return server_name.lower()
 
-    except Exception:
-        return None
+            pos += ext_size
+
+    except Exception as e:
+        log.debug(f"SNI parse error: {e}")
 
     return None
 
+
+# -----------------------
+# Flow key builder
+# -----------------------
+def flow_key(packet):
+    ip = packet.payload
+    tcp = packet[TCP]
+
+    return (
+        ip.src,
+        tcp.sport,
+        ip.dst,
+        tcp.dport
+    )
+
+
+# -----------------------
+# Packet handler
+# -----------------------
 def packet_callback(packet):
-    if packet.haslayer(TCP) and packet.haslayer(Raw):
-        payload = packet[Raw].load
-        sni = extract_sni(payload)
+    if not packet.haslayer(TCP):
+        return
+
+    if not packet.haslayer(Raw):
+        return
+
+    try:
+        key = flow_key(packet)
+        payload = bytes(packet[Raw].load)
+
+        # append stream data
+        streams[key] += payload
+
+        # limit buffer size (prevent memory abuse)
+        if len(streams[key]) > 65535:
+            streams[key] = streams[key][-65535:]
+
+        # attempt SNI extraction
+        sni = extract_sni(streams[key])
 
         if sni:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
             line = f"[{timestamp}] {sni}"
 
             print(line)
 
-            with open(LOG_FILE, "a") as f:
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
                 f.write(line + "\n")
 
-print("Listening for TLS SNI traffic...")
-sniff(filter="tcp port 443", prn=packet_callback, store=False)
+            # cleanup stream after success
+            del streams[key]
+
+    except Exception as e:
+        log.error(f"Packet error: {e}")
+
+
+# -----------------------
+# Start sniffing
+# -----------------------
+print("TLS SNI Stream Logger started...")
+print(f"Logging to: {LOG_FILE}")
+print("Press CTRL+C to stop\n")
+
+sniff(
+    filter="tcp port 443",
+    prn=packet_callback,
+    store=False
+)
