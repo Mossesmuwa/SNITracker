@@ -1,5 +1,6 @@
-# DNS Monitor (Improved Version)
-# Use responsibly. Monitor only networks you own or have permission to inspect.
+#!/usr/bin/env python3
+# DNS Monitor Tool
+# Use only on authorized networks.
 
 from scapy.all import sniff, DNSQR
 from datetime import datetime, timedelta
@@ -13,29 +14,33 @@ import re
 from logging.handlers import RotatingFileHandler
 
 # ----------------------------
-# Argument Parsing
+# CLI
 # ----------------------------
-parser = argparse.ArgumentParser(description="DNS Traffic Monitor")
-parser.add_argument("--iface", help="Network interface to sniff on", default=None)
-parser.add_argument("--log", help="Log file", default="dns_log.txt")
-parser.add_argument("--json", action="store_true", help="Log in JSON format")
-parser.add_argument("--timeout", type=int, default=300, help="Deduplication timeout (seconds)")
-args = parser.parse_args()
+def get_args():
+    parser = argparse.ArgumentParser(
+        description="DNS Monitor Tool - inspect DNS traffic in real time"
+    )
+
+    parser.add_argument("--iface", help="Network interface (e.g. eth0, wlan0)", default=None)
+    parser.add_argument("--log", help="Log file path", default="dns_log.txt")
+    parser.add_argument("--json", action="store_true", help="Output JSON logs")
+    parser.add_argument("--timeout", type=int, default=300, help="Deduplication window (seconds)")
+    parser.add_argument("--quiet", action="store_true", help="Hide console output")
+    parser.add_argument("--stats", action="store_true", help="Show live stats on exit")
+
+    return parser.parse_args()
+
+
+args = get_args()
 
 # ----------------------------
-# Blocklist (compiled regex)
+# Block rules
 # ----------------------------
-BLOCKLIST = [
-    "adult",
-    "porn",
-    "gambling",
-    "casino",
-]
-
+BLOCKLIST = ["adult", "porn", "gambling", "casino"]
 BLOCK_REGEX = re.compile("|".join(BLOCKLIST), re.IGNORECASE)
 
 # ----------------------------
-# Logging setup
+# Logging
 # ----------------------------
 logger = logging.getLogger("dns-monitor")
 logger.setLevel(logging.INFO)
@@ -45,96 +50,109 @@ formatter = logging.Formatter("[%(asctime)s] %(message)s")
 file_handler = RotatingFileHandler(args.log, maxBytes=2_000_000, backupCount=3)
 file_handler.setFormatter(formatter)
 
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-
 logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+
+if not args.quiet:
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    logger.addHandler(console)
 
 # ----------------------------
-# Runtime state
+# State
 # ----------------------------
-seen = {}  # {domain: last_seen_time}
+seen = {}
 lock = threading.Lock()
 
 stats = {
     "packets": 0,
-    "domains": 0
+    "domains": 0,
+    "blocked": 0
 }
 
 running = True
 
 
 # ----------------------------
-# Cleanup old entries
+# Cleanup
 # ----------------------------
-def cleanup_seen():
-    """Remove old entries to prevent memory growth."""
-    now = datetime.now()
-    expired = now - timedelta(seconds=args.timeout)
+def cleanup():
+    cutoff = datetime.now() - timedelta(seconds=args.timeout)
 
     with lock:
-        to_delete = [d for d, t in seen.items() if t < expired]
-        for d in to_delete:
-            del seen[d]
+        for d in list(seen.keys()):
+            if seen[d] < cutoff:
+                del seen[d]
 
 
 # ----------------------------
 # Packet handler
 # ----------------------------
-def process_packet(packet):
-    global stats
-
+def handle_packet(packet):
     if not packet.haslayer(DNSQR):
         return
 
     try:
-        stats["packets"] += 1
-
         domain = packet[DNSQR].qname.decode(errors="ignore").rstrip(".")
         now = datetime.now()
 
         with lock:
-            # dedupe within timeout window
+            stats["packets"] += 1
+
             last = seen.get(domain)
             if last and (now - last).total_seconds() < args.timeout:
                 return
+
             seen[domain] = now
+            stats["domains"] += 1
 
-        stats["domains"] += 1
+        flagged = bool(BLOCK_REGEX.search(domain))
 
-        warning = ""
-        if BLOCK_REGEX.search(domain):
-            warning = " [FLAGGED]"
+        if flagged:
+            stats["blocked"] += 1
+
+        log_data = {
+            "time": now.isoformat(),
+            "domain": domain,
+            "flagged": flagged
+        }
 
         if args.json:
-            log_entry = json.dumps({
-                "time": now.isoformat(),
-                "domain": domain,
-                "flagged": bool(warning),
-            })
+            output = json.dumps(log_data)
         else:
-            log_entry = f"{now:%Y-%m-%d %H:%M:%S} - {domain}{warning}"
+            output = f"{now:%Y-%m-%d %H:%M:%S} | {domain}" + (" [BLOCKED]" if flagged else "")
 
-        logger.info(log_entry)
+        logger.info(output)
 
-        # periodic cleanup
         if stats["domains"] % 50 == 0:
-            cleanup_seen()
+            cleanup()
 
     except Exception as e:
-        logger.error(f"Error processing packet: {e}")
+        logger.error(f"Error: {e}")
 
 
 # ----------------------------
-# Graceful shutdown
+# Stats display
+# ----------------------------
+def print_stats():
+    print("\n--- DNS MONITOR STATS ---")
+    print(f"Packets  : {stats['packets']}")
+    print(f"Domains  : {stats['domains']}")
+    print(f"Blocked  : {stats['blocked']}")
+    print("-------------------------\n")
+
+
+# ----------------------------
+# Shutdown handler
 # ----------------------------
 def shutdown(sig, frame):
     global running
     running = False
-    print("\nStopping DNS monitor...")
-    print(f"Packets seen: {stats['packets']}")
-    print(f"Domains logged: {stats['domains']}")
+
+    print("\nStopping DNS Monitor...")
+
+    if args.stats:
+        print_stats()
+
     sys.exit(0)
 
 
@@ -142,15 +160,24 @@ signal.signal(signal.SIGINT, shutdown)
 
 
 # ----------------------------
-# Start sniffing
+# Main tool runtime
 # ----------------------------
-print("DNS Monitor started")
-print(f"Log file: {args.log}")
-print("Press CTRL+C to stop\n")
+def main():
+    print("===================================")
+    print(" DNS Monitor Tool v1.0")
+    print("===================================")
+    print(f"Interface : {args.iface or 'auto'}")
+    print(f"Log file  : {args.log}")
+    print(f"JSON mode : {args.json}")
+    print("Press CTRL+C to stop\n")
 
-sniff(
-    filter="udp port 53",
-    prn=process_packet,
-    store=False,
-    iface=args.iface
-)
+    sniff(
+        filter="udp port 53",
+        prn=handle_packet,
+        store=False,
+        iface=args.iface
+    )
+
+
+if __name__ == "__main__":
+    main()
