@@ -1,4 +1,157 @@
+<div align="center">
 
+# 🛰️ SNITracker
+
+### Lightweight TLS SNI Monitoring & Policy Engine
+
+A high-performance network tool for extracting **Server Name Indication (SNI)** from TLS traffic to enable real-time domain visibility, logging, and policy enforcement without decryption.
+
+---
+
+![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Status](https://img.shields.io/badge/status-active-success.svg)
+![Network](https://img.shields.io/badge/network-analysis-red.svg)
+
+</div>
+
+---
+
+## ⚠️ Notice
+
+SNITracker is a **dual-use network analysis tool** and should only be used for:
+
+- Authorized security testing  
+- Educational and research purposes  
+- Systems you own or manage  
+
+Unauthorized use may violate laws.
+
+---
+
+## 🌐 Overview
+
+SNITracker inspects the **TLS handshake** to extract SNI data before encryption hides destination intent.
+
+It provides lightweight metadata-based visibility without decrypting traffic.
+
+---
+
+## 🧠 Features
+
+- Real-time SNI extraction  
+- Encrypted traffic domain visibility  
+- Domain filtering (block/allow rules)  
+- Structured logging  
+- Redirect and warning responses  
+- Lightweight Python architecture  
+- Modular and extensible design  
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+    A[Client] --> B[TLS Handshake]
+    B --> C[SNI Extraction]
+    C --> D[Policy Engine]
+    D --> E[Allow / Block / Redirect / Log]
+```
+
+---
+
+## 📦 Installation
+
+```bash
+git clone https://github.com/Mossesmuwa/SNITracker.git
+cd SNITracker
+pip install scapy
+```
+
+> Requires root/administrator privileges for packet capture.
+
+---
+
+## 🚀 Usage
+
+```bash
+python sni_logger.py      # Log SNI traffic
+python sni_filter.py      # Apply filtering rules
+python warning_server.py  # Start warning page
+```
+
+---
+
+## ⚙️ Configuration
+
+```python
+BLOCKED_DOMAINS = {"example.com", "badsite.com"}
+
+WARNING_IP = "1.1.1.1"
+WARNING_PORT = 8080
+
+LOG_FILE = "sni_log.txt"
+```
+
+---
+
+## 📊 Example Output
+
+```
+[2026-06-05 14:32:10] google.com
+[2026-06-05 14:32:15] github.com
+[2026-06-05 14:32:20] badsite.com → BLOCKED
+```
+
+---
+
+## 🚧 Limitations
+
+- Does not decrypt HTTPS traffic  
+- Limited against TLS 1.3 ECH  
+- Requires elevated privileges  
+- Depends on SNI availability  
+- Not a full DPI firewall  
+
+---
+
+## 🧭 Roadmap
+
+- Web dashboard (React + WebSocket)  
+- GeoIP enrichment  
+- DNS + SNI correlation  
+- Anomaly detection (ML-based)  
+- Firewall integration (iptables/nftables)  
+- Distributed monitoring  
+
+---
+
+## 🧪 Use Cases
+
+- Network visibility and monitoring  
+- Security research and labs  
+- Educational networking projects  
+- Policy enforcement prototyping  
+
+---
+
+## 📄 License
+
+MIT License
+
+---
+
+## 🙌 Inspiration
+
+Inspired by TLS inspection and metadata-driven security research.
+
+Key conceptual influence:
+
+👉 https://youtu.be/FBwHNMgxmhI  
+**David Bambal**
+
+> Encrypted traffic still reveals structure — and structure reveals intent.
 
 ---
 
